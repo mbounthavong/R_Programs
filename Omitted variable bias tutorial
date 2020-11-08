@@ -1,0 +1,176 @@
+###########################################################################################
+# Title:      Omitted variable bias 
+# By:         Mark Bounthavong
+# Output:     R / R Markdown
+# Category:   Econometrics
+# Date:       12 October 2020
+# Updated:    14 October 2020
+# Updated by: Mark Bounthavong
+###########################################################################################
+
+###########################################################################################
+#### INTRODUCTION ####
+# In this example, we will create a scenario where the regressors (X_i = X2, X3, and X4) 
+# are correlated with each other and with X1; hence, they are correlated with the error term. 
+# The main predictor of interest is denoted as X1, while confounders are denoted as X2, 
+# X3, and X4. The main outcome is denoted as Y. 
+# 
+# Using the OLS framework, the regression model is represented as:
+# 
+# Y = beta0 + beta1*X1 + beta2*X2 + beta3*X3 + beta4*X4 + error
+# 
+# This example will have two conditions that we will explore:
+#   1) Regressors are correlated with one another
+#   2) Regressors are NOT correlated with one another
+###########################################################################################
+
+###########################################################################################
+#### References, Resources, Packages used in this exercise #####
+###########################################################################################
+# https://cran.r-project.org/web/packages/stargazer/vignettes/stargazer.pdf
+# https://francish.netlify.app/post/omitted-variable-bias-example/
+# https://cran.r-project.org/web/packages/stargazer/vignettes/stargazer.pdf
+# https://lavaan.ugent.be/
+# http://www.sthda.com/english/wiki/correlation-matrix-a-quick-start-guide-to-analyze-format-and-visualize-a-correlation-matrix-using-r-software
+# https://www.statmethods.net/advgraphs/correlograms.html
+# https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html
+###########################################################################################
+
+###########################################################################################
+#### Clear data #### 
+###########################################################################################
+rm(list=ls())
+
+###########################################################################################
+#### Install these packages to simulate a dataset for this exercise ####
+###########################################################################################
+library(stargazer)   ## generates nice tables to compare models 
+library(gendata)     ## generates simulated data
+library(lavaan)      ## create correlation matrix
+library(data.table)  ## generate tables
+
+
+###########################################################################################
+#### Create a data set with 4 regressors using a correlation matrix: ####
+###########################################################################################
+dat0 <- lav_matrix_lower2full(c(1, 0.8, 1, 0.5, 0.5, 1, 0.2, 0.4, 0.8, 1))  ## correlation matrix
+dat0
+# [,1] [,2] [,3] [,4]
+# [1,]  1.0  0.8  0.5  0.2
+# [2,]  0.8  1.0  0.5  0.4
+# [3,]  0.5  0.5  1.0  0.8
+# [4,]  0.2  0.4  0.8  1.0
+
+rownames(dat0)<-colnames(dat0)<-c("var1",'var2','var3','var4')
+
+dat1 <- genmvnorm(dat0, k = 4, n = 10000, seed = 12345)  ## Simulate a data set with N=10,000 samples
+
+dat1
+
+###########################################################################################
+#### Visualize the correlation of the data (dat1) ####
+###########################################################################################
+#### Method 1:
+cor(dat1)  ## simple table visual of the correlation matrix
+
+#### Method 2:
+library(corrgram)  ## package to help visualize data in correlation matrices
+library(corrplot)  ## package to display correlation matrices
+corrplot.mixed(corrgram(dat1), lower = "number", upper = "ellipse")
+
+#### Method 3:
+library("PerformanceAnalytics")
+chart.Correlation(dat1, histogram = TRUE, pch = 19)
+
+
+###########################################################################################
+#### Determine the "true" coefficient values a priori and assign the main outcome Y ####
+###########################################################################################
+beta1 <- 2      ## Primary predictor of interest
+beta2 <- 4
+beta3 <- 10
+beta4 <- 1.5
+set.seed(12345) #add seed so the error is the same
+dat1$Y <-  beta1*dat1$X1 + beta2*dat1$X2 + beta3*dat1$X3 + beta4*dat1$X4 + rnorm(1000)
+
+
+#### The correct "true" model with all the variables included -- OLS ####
+model1 <- lm(Y ~ X1 + X2 + X3 + X4, data = dat1)
+summary(model1) 
+
+#### Biased model Y = b0 + b1*X1 only ####
+model2 <- lm(Y ~ X1, data = dat1)
+summary(model2)
+
+#### Biased model Y = b0 + b1*X1 + b2*X2 only ####
+model3 <- lm(Y ~ X1 + X2, data = dat1)
+summary(model3)
+
+#### Biased model Y = b0 + b1*X1 + b3*X3 + b4*X4 only ####
+model4 <- lm(Y ~ X1 + X3 + X4, data = dat1)
+summary(model4)
+
+###########################################################################################
+#### Compare the four models ####
+###########################################################################################
+stargazer(model1, model2, model3, model4, type = 'text', no.space = T,
+          star.cutoffs = c(.05, .01, .001),
+          keep.stat = c("n", "rsq"))
+
+
+
+
+###########################################################################################
+#### Compare findings with a True model where the variables are uncorrelated ####
+###########################################################################################
+set.seed(12345)
+X1 <- rnorm(10000)
+X2 <- rnorm(10000)
+X3 <- rnorm(10000)
+X4 <- rnorm(10000)
+
+#### Uncorrelated model ####
+Y <- beta1*X1 + beta2*X2 + beta3*X3 + beta4*X4 + rnorm(10000) 
+
+#### Put these regressors' values into a table ####
+dat2 <- data.frame(data.table(X1, X2, X3, X4))
+
+dat2
+
+###########################################################################################
+#### Visualize the correlation of the data (dat2) ####
+###########################################################################################
+#### Method 1:
+cor(dat2)
+
+#### Method 2:
+corrplot.mixed(corrgram(dat2), lower = "number", upper = "circle", lower.col = "black")
+
+#### Method 3:
+chart.Correlation(dat2, histogram=TRUE, pch=19)
+
+
+#### The correct "true" model with all the variables included -- OLS ####
+model4 <- lm(Y ~ X1 + X2 + X3 + X4, data = dat2)
+summary(model4)
+
+#### Biased model Y = b0 + b1*X1 only ####
+model5 <- lm(Y ~ X1, data = dat2)
+summary(model5)
+
+#### Biased model Y = b0 + b1*X1 + b2*X2 only ####
+model6 <- lm(Y ~ X1 + X2, data = dat2)
+summary(model6)
+
+#### Biased model Y = b0 + b1*X1 + b3*X3 + b4*X4 only ####
+model7 <- lm(Y ~ X1 + X3 + X4, data = dat2)
+summary(model7)
+
+###########################################################################################
+#### Compare the four models ####
+###########################################################################################
+stargazer(model4, model5, model6, model7, type = 'text', no.space = T,
+          star.cutoffs = c(.05, .01, .001),
+          keep.stat = c("n","rsq"))
+
+
